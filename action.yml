@@ -1,0 +1,50 @@
+name: Build and upload a tree-sitter grammar
+description: Build and upload a tree-sitter grammar
+author: sebastiaanspeck
+branding:
+  icon: gift
+  color: blue
+
+inputs:
+  os:
+    required: true
+  ext:
+    required: true
+  cc:
+    required: true
+  postfix:
+    required: true
+  check-parser:
+    default: false
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - run: echo "ARTIFACT_NAME=lib${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+      shell: bash
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+    - run: npm install
+      shell: bash
+    - name: build
+      shell: bash
+      run: |
+        npm run-script build-test
+        ${{ inputs.cc }} -fPIC -c -Isrc/ src/parser.c -o parser.o
+        ${{ inputs.cc }} -fPIC -shared parser.o -o ${{ env.ARTIFACT_NAME }}.${{ inputs.ext }}
+    - name: check unchanged parser.c
+      if: inputs.check-parser == 'true'
+      shell: bash
+      run: |
+        git status
+        exit $(git status --porcelain=v1 2>/dev/null | grep -c src/parser.c)
+    - run: tar zcfv ${{ env.ARTIFACT_NAME }}-${{ inputs.postfix }}.tar.gz ${{ env.ARTIFACT_NAME }}.${{ inputs.ext }}
+      shell: bash
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ARTIFACT_NAME }}-${{ inputs.postfix }}
+        path: ${{ env.ARTIFACT_NAME }}-${{ inputs.postfix }}.tar.gz
+        if-no-files-found: error
